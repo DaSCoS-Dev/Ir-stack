@@ -1,5 +1,7 @@
 # IR Stack
 
+**Italiano** | [English](README_ENG.md)
+
 IR Stack è uno stack leggero di **incident detection / identity monitoring** per server Linux con systemd e auditd.
 Nasce dalla guida pubblicata su SicurezzaReti e trasforma quella baseline monolitica in un progetto modulare, verificabile e installabile in modo interattivo o unattended.
 
@@ -178,7 +180,6 @@ TRUSTED_SOURCES="192.168.2.43,10.0.10.98,10.0.20.0/24"
 
 La stessa lista protegge il lockdown e funge da allowlist per `ir-ban`: un IP compreso in queste reti non può essere bannato.
 
-
 ## Configurazione sicura
 
 `/etc/ir-stack/ir-stack.conf` è un file `KEY=VALUE` interpretato da un parser con allowlist: **non viene eseguito con `source`**. I commenti devono stare su righe separate; i commenti inline non sono supportati.
@@ -217,7 +218,6 @@ Il lockdown è volutamente separato dalla detection e parte **OFF**. Prima di ab
 - esegui un test manuale e un rollback.
 
 IR Stack non esegue più flush del firewall: usa oggetti dedicati e un rollback che rimuove solo ciò che ha creato. Rimane comunque obbligatorio collaudare il backend scelto e mantenere accesso console/out-of-band.
-
 
 ## Limiti e modello di fiducia
 
