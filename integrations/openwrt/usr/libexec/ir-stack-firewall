@@ -1,0 +1,35 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Dascos
+set -eu
+cmd="${1:-}"; ip="${2:-}"
+
+validate_ip(){
+  case "$1" in ''|*[!0-9A-Fa-f:.]*) echo 'invalid ip' >&2; exit 2;; esac
+  if echo "$1" | grep -q ':'; then typ=ipv6_addr; else typ=ipv4_addr; fi
+  # Parse/semantic validation through nft without changing the live ruleset.
+  nft -c -f - >/dev/null 2>&1 <<EOF2 || { echo 'invalid ip' >&2; exit 2; }
+add table inet ir_stack_validate_tmp
+add set inet ir_stack_validate_tmp test { type $typ; }
+add element inet ir_stack_validate_tmp test { $1 }
+delete table inet ir_stack_validate_tmp
+EOF2
+}
+backend(){ if [ -x /usr/bin/f2b-banip ]; then echo banip; else echo nftables; fi; }
+nft_ensure(){ nft list table inet ir_stack_edge >/dev/null 2>&1 || { echo 'ir_stack_edge table missing; run firewall reload or reinstall helper' >&2; exit 2; }; }
+case "$cmd" in
+ check) b="$(backend)"; [ "$b" = banip ] || nft_ensure; echo "ok backend=$b";;
+ status) b="$(backend)"; if [ "$b" = banip ]; then nft list table inet banIP 2>/dev/null || uci show banip 2>/dev/null || true; else nft list table inet ir_stack_edge; fi;;
+ ban|unban)
+   validate_ip "$ip"; b="$(backend)"
+   if [ "$b" = banip ]; then
+      if [ "$cmd" = ban ]; then /usr/bin/f2b-banip sync-add "$ip"; else /usr/bin/f2b-banip sync-del "$ip"; fi
+   else
+      nft_ensure
+      if echo "$ip" | grep -q ':'; then set=banned_v6; else set=banned_v4; fi
+      if [ "$cmd" = ban ]; then nft -exist add element inet ir_stack_edge "$set" "{ $ip }"; else nft delete element inet ir_stack_edge "$set" "{ $ip }" 2>/dev/null || true; fi
+   fi
+   logger -t ir-stack-openwrt "$cmd ip=$ip backend=$b"
+   ;;
+ *) echo 'Uso: ir-stack-firewall check|status|ban IP|unban IP' >&2; exit 2;;
+esac

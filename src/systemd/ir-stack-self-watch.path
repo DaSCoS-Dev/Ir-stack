@@ -1,0 +1,29 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Dascos
+[Unit]
+Description=Watch IR Stack files for modification
+StartLimitIntervalSec=300
+StartLimitBurst=40
+
+[Path]
+PathModified=/usr/local/lib/ir-stack
+PathModified=/usr/local/sbin/check-identity-anomalies.sh
+PathModified=/usr/local/sbin/identity-incident-handler.sh
+PathModified=/usr/local/sbin/ssh-login-alert.sh
+PathModified=/usr/local/sbin/ir-stack-watch.sh
+PathModified=/usr/local/sbin/ir-guardians-watchdog.sh
+PathModified=/usr/local/sbin/emergency-lockdown.sh
+PathModified=/usr/local/sbin/emergency-lockdown-rollback.sh
+PathModified=/usr/local/sbin/refresh-ssh-key-audit.sh
+PathModified=/usr/local/sbin/irctl
+PathModified=/usr/local/sbin/ssh-key-inventory.sh
+PathModified=/usr/local/sbin/accept-ssh-key-baseline.sh
+PathModified=/var/lib/ir-stack/ssh-keys.baseline
+PathModified=/etc/ir-stack
+PathModified=/usr/local/sbin/ir-ban
+PathModified=/usr/local/sbin/ir-openwrt-ban
+PathModified=/usr/local/lib/ir-stack/firewall
+Unit=ir-stack-self-watch.service
+
+[Install]
+WantedBy=multi-user.target

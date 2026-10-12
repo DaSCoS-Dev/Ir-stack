@@ -1,0 +1,22 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Dascos
+[Unit]
+Description=IR Stack self-modification alert
+After=auditd.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/ir-stack-watch.sh
+User=root
+Group=root
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/var/log -/var/spool/postfix /run/ir-stack
+NoNewPrivileges=yes
+ProtectControlGroups=yes
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6

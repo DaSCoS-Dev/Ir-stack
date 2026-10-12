@@ -1,0 +1,10 @@
+# Rename to .local and adapt the filter/logpath before enabling.
+# This is intentionally disabled: IR Stack does not guess which service you want Fail2Ban to protect.
+[ir-stack-example]
+enabled = false
+filter = sshd
+backend = systemd
+banaction = ir-stack
+maxretry = 5
+findtime = 10m
+bantime = 1h

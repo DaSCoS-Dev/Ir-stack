@@ -1,0 +1,26 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Dascos
+set -efu
+orig="${SSH_ORIGINAL_COMMAND:-}"
+cmd="$orig"
+arg=''
+case "$orig" in
+  *' '*) cmd=${orig%% *}; arg=${orig#* };;
+esac
+case "$arg" in *' '*) cmd='';; esac
+case "$cmd" in
+  check|status)
+    [ -z "$arg" ] || exit 126
+    exec /usr/libexec/ir-stack-firewall "$cmd"
+    ;;
+  ban|unban)
+    case "$arg" in ''|*[!0-9A-Fa-f:.]*) exit 126;; esac
+    exec /usr/libexec/ir-stack-firewall "$cmd" "$arg"
+    ;;
+  *)
+    safe="$(printf '%s' "$orig" | tr '\r\n' '  ')"
+    logger -t ir-stack-openwrt "forced-command rejected: $safe"
+    exit 126
+    ;;
+esac

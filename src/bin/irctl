@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Dascos
+set -euo pipefail
+. /usr/local/lib/ir-stack/common.sh
+ir_load_config
+
+units=(ir-stack-identity.path ir-stack-identity.timer ir-stack-ssh-login.timer ir-stack-self-watch.path ir-stack-guardians.timer)
+
+status() { for u in "${units[@]}"; do systemctl status "$u" --no-pager || true; echo; done; }
+audit() { auditctl -l || true; for key in identity privilege sshcfg sshkeys user_mgmt passwd_mgmt sudo_change ir_stack; do echo "===== $key ====="; ausearch -k "$key" -ts recent -i || true; done; }
+logs() { for tag in ir-stack-identity ssh-login-alert ir-stack-watch ir-guardians-watchdog; do echo "===== $tag ====="; journalctl -t "$tag" -n 50 --no-pager || true; done; }
+check() { /usr/local/sbin/check-identity-anomalies.sh || true; }
+mail_test() { ir_send_mail "[IR TEST] $(ir_host)" "Test email IR Stack inviato il $(date --iso-8601=seconds)."; echo "Richiesta di invio completata. Controllare relay, coda e destinatario."; }
+doctor() {
+    echo "Version: $(cat /usr/local/share/ir-stack/VERSION 2>/dev/null || echo unknown)"
+    echo "Host: $(ir_host)"; echo "Config: $IR_CONFIG"; echo "Mail mode: $MAIL_MODE"; echo "Alert email: ${ALERT_EMAIL:-<none>}"
+    echo "Lockdown: $ENABLE_LOCKDOWN"; echo "Trusted sources: ${TRUSTED_SOURCES:-<none>}"; echo "Firewall backend: $FIREWALL_BACKEND -> $(ir_resolve_firewall_backend)"
+    echo "Ban backends: $BAN_BACKENDS"; echo "OpenWrt remote: $OPENWRT_REMOTE_ENABLE ${OPENWRT_HOST:-}"; echo "SSH port: $SSH_PORT"; echo
+    for c in auditctl ausearch augenrules journalctl systemctl flock python3; do printf '%-14s %s\n' "$c" "$(command -v "$c" || echo MISSING)"; done
+    echo; systemctl --failed --no-pager || true
+}
+maintenance() {
+    local action="${1:-status}" mins="${2:-60}" f until now
+    install -d -m 700 /run/ir-stack; f="$(ir_maintenance_file)"
+    case "$action" in
+        on)
+            if [[ ! "$mins" =~ ^[0-9]+$ ]] || (( mins <= 0 )); then echo "Minuti non validi" >&2; exit 2; fi
+            until=$(( $(date +%s) + mins*60 )); printf '%s\n' "$until" > "$f"; chmod 600 "$f"
+            echo "Maintenance attiva per $mins minuti (fino a $(date -d "@$until" --iso-8601=seconds)).";;
+        off) rm -f "$f"; echo "Maintenance disattivata.";;
+        status) if ir_maintenance_active; then until="$(cat "$f")"; now="$(date +%s)"; echo "Maintenance ATTIVA, restano $(( (until-now+59)/60 )) minuti."; else echo "Maintenance non attiva."; fi;;
+        *) echo "Uso: irctl maintenance on [minuti]|off|status" >&2; exit 2;;
+    esac
+}
+firewall_status() {
+    local backend; backend="$(ir_resolve_firewall_backend)"; echo "Backend: $backend"
+    if [[ -s "$IR_STATE_DIR/firewall/lockdown/backend" ]]; then echo "Lockdown registrato: $(cat "$IR_STATE_DIR/firewall/lockdown/backend")"; "$(ir_firewall_driver "$(cat "$IR_STATE_DIR/firewall/lockdown/backend")")" lockdown-status || true; else echo "Lockdown non attivo."; fi
+}
+test_manual() { systemctl start ir-stack-identity-manual.service; journalctl -u ir-stack-identity-manual.service -n 30 --no-pager || true; }
+test_path() { touch -c /etc/passwd; sleep 2; journalctl -u ir-stack-identity-path.service -n 30 --no-pager || true; }
+test_ssh() { systemctl start ir-stack-ssh-login.service; journalctl -u ir-stack-ssh-login.service -n 30 --no-pager || true; }
+test_ir() { touch -c /usr/local/sbin/identity-incident-handler.sh; sleep 2; journalctl -u ir-stack-self-watch.service -n 30 --no-pager || true; }
+test_watch() { systemctl start ir-stack-guardians.service; journalctl -u ir-stack-guardians.service -n 30 --no-pager || true; }
+usage() { cat <<'EOF'
+Uso: irctl <comando>
+  status | audit | logs | check | doctor | mail-test | refresh-audit
+  ssh-baseline-accept | ssh-baseline-show | firewall-status | lockdown | rollback
+  ban add|del IP | ban status
+  maintenance on [min] | maintenance off | maintenance status
+  test-manual | test-path | test-ssh | test-ir | test-watch
+EOF
+}
+cmd="${1:-help}"; shift || true
+case "$cmd" in
+    status) status;; audit) audit;; logs) logs;; check) check;; doctor) doctor;; mail-test) mail_test;; refresh-audit) /usr/local/sbin/refresh-audit-rules.sh;;
+    ssh-baseline-accept) /usr/local/sbin/accept-ssh-key-baseline.sh;; ssh-baseline-show) cat /var/lib/ir-stack/ssh-keys.baseline 2>/dev/null || echo "Baseline assente";;
+    firewall-status) firewall_status;; lockdown) /usr/local/sbin/emergency-lockdown.sh;; rollback) /usr/local/sbin/emergency-lockdown-rollback.sh;; ban) /usr/local/sbin/ir-ban "$@";; maintenance) maintenance "$@";;
+    test-manual) test_manual;; test-path) test_path;; test-ssh) test_ssh;; test-ir) test_ir;; test-watch) test_watch;; help|-h|--help) usage;; *) echo "Comando sconosciuto: $cmd" >&2; usage; exit 2;;
+esac

@@ -1,0 +1,113 @@
+name: publish-release
+
+on:
+  push:
+    branches:
+      - prod
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    if: startsWith(github.event.head_commit.message, 'Release ')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Validate release version
+        id: version
+        env:
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(tr -d '[:space:]' < VERSION)"
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]] || {
+            echo "VERSION non valida: $version" >&2
+            exit 2
+          }
+          first_line="${COMMIT_MESSAGE%%$'\n'*}"
+          [[ "$first_line" == "Release $version" ]] || {
+            echo "Commit/version mismatch: '$first_line' vs 'Release $version'" >&2
+            exit 2
+          }
+          printf 'version=%s\n' "$version" >> "$GITHUB_OUTPUT"
+          printf 'tag=v%s\n' "$version" >> "$GITHUB_OUTPUT"
+
+      - name: Build standalone release asset
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./scripts/build-standalone.sh
+          chmod 0755 dist/install-ir-stack.sh
+          (
+            cd dist
+            sha256sum install-ir-stack.sh > SHA256SUMS
+          )
+          bash -n dist/install-ir-stack.sh
+          ./dist/install-ir-stack.sh --help >/dev/null
+
+      - name: Create or refresh GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+          TAG: ${{ steps.version.outputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          notes="$(mktemp)"
+          trap 'rm -f "$notes"' EXIT
+          cat > "$notes" <<EOF
+          # IR Stack $VERSION
+
+          Release candidate dopo security/code review completa.
+
+          ## Highlights
+
+          - installer modulare interattivo e unattended;
+          - file-integrity e identity monitoring con auditd/systemd;
+          - trusted source multiple con IP e CIDR IPv4/IPv6;
+          - lockdown locale con nftables, iptables o firewalld;
+          - ban dinamici locali e integrazione Fail2Ban;
+          - backend OpenWrt remoto con chiave SSH dedicata e forced-command;
+          - maintenance window, watchdog e baseline SSH;
+          - configurazione data-only, senza source/eval della config runtime;
+          - CI con regression test e ShellCheck Bash/POSIX.
+
+          Per dettagli tecnici e rischi residui vedere **SECURITY-REVIEW.md** e **CHANGELOG.md**.
+
+          Licenza: **GPL-3.0-or-later**.
+          EOF
+
+          prerelease=false
+          [[ "$VERSION" == *-* ]] && prerelease=true
+
+          if release_id="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" --jq .id 2>/dev/null)"; then
+            gh api --method PATCH "repos/$GITHUB_REPOSITORY/git/refs/tags/$TAG" \
+              -f sha="$GITHUB_SHA" -F force=true >/dev/null
+            gh api --method PATCH "repos/$GITHUB_REPOSITORY/releases/$release_id" \
+              -f tag_name="$TAG" \
+              -f target_commitish="$GITHUB_SHA" \
+              -f name="IR Stack $VERSION" \
+              -f body="$(cat "$notes")" \
+              -F prerelease="$prerelease" >/dev/null
+            gh release upload "$TAG" \
+              dist/install-ir-stack.sh dist/SHA256SUMS \
+              --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            args=(
+              "$TAG"
+              --repo "$GITHUB_REPOSITORY"
+              --target "$GITHUB_SHA"
+              --title "IR Stack $VERSION"
+              --notes-file "$notes"
+              dist/install-ir-stack.sh
+              dist/SHA256SUMS
+            )
+            [[ "$prerelease" == true ]] && args+=(--prerelease)
+            gh release create "${args[@]}"
+          fi

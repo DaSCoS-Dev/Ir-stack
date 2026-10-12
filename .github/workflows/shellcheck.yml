@@ -1,0 +1,26 @@
+# IR Stack 0.2.0-rc1 CI
+name: security-and-shell-checks
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  shellcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Install validation tools
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+      - name: Syntax and regression smoke tests
+        run: ./tests/smoke.sh
+      - name: ShellCheck installer source graph
+        run: shellcheck -x -e SC1090,SC1091,SC2034,SC2154,SC2015,SC2016 install.sh
+      - name: ShellCheck Bash runtime sources
+        run: shellcheck -e SC1090,SC1091,SC2016 uninstall.sh src/bin/* src/lib/*.sh src/firewall/*.sh scripts/*.sh tests/*.sh
+      - name: ShellCheck OpenWrt POSIX sh sources
+        run: shellcheck -s sh integrations/openwrt/install.sh integrations/openwrt/usr/libexec/ir-stack-firewall integrations/openwrt/usr/libexec/ir-stack-firewall-ssh-wrapper
+      - name: Build standalone installer
+        run: ./scripts/build-standalone.sh && bash -n dist/install-ir-stack.sh && ./dist/install-ir-stack.sh --help >/dev/null

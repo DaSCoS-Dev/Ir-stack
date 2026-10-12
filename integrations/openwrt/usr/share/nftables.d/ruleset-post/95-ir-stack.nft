@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Standalone fallback used only when /usr/bin/f2b-banip is absent.
+table inet ir_stack_edge {
+    set banned_v4 { type ipv4_addr; }
+    set banned_v6 { type ipv6_addr; }
+    chain input {
+        type filter hook input priority -310; policy accept;
+        ip saddr @banned_v4 drop
+        ip6 saddr @banned_v6 drop
+    }
+    chain forward {
+        type filter hook forward priority -310; policy accept;
+        ip saddr @banned_v4 drop
+        ip6 saddr @banned_v6 drop
+    }
+}

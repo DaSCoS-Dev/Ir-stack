@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Dascos
+set -euo pipefail
+. /usr/local/lib/ir-stack/common.sh
+ir_load_config
+OPENWRT_PORT="${OPENWRT_PORT:-22}"
+OPENWRT_USER="${OPENWRT_USER:-root}"
+cmd="${1:-check}"; ip="${2:-}"
+[[ "$OPENWRT_REMOTE_ENABLE" == yes ]] || { echo 'OpenWrt remoto disabilitato' >&2; exit 2; }
+[[ -n "$OPENWRT_HOST" ]] || { echo 'OPENWRT_HOST mancante' >&2; exit 2; }
+[[ -r "$OPENWRT_IDENTITY_FILE" ]] || { echo "Chiave OpenWrt assente: $OPENWRT_IDENTITY_FILE" >&2; exit 2; }
+[[ -r "$OPENWRT_KNOWN_HOSTS" ]] || { echo "known_hosts OpenWrt assente: $OPENWRT_KNOWN_HOSTS" >&2; exit 2; }
+case "$cmd" in
+    ban-add) op=ban; ip="$(ir_validate_ip "$ip")";;
+    ban-del) op=unban; ip="$(ir_validate_ip "$ip")";;
+    check) op=check; ip='';;
+    ban-status) op=status; ip='';;
+    *) echo 'comando openwrt non valido' >&2; exit 2;;
+esac
+exec ssh -F /dev/null -i "$OPENWRT_IDENTITY_FILE" -p "$OPENWRT_PORT" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$OPENWRT_KNOWN_HOSTS" -o ConnectTimeout=8 "$OPENWRT_USER@$OPENWRT_HOST" "$op${ip:+ $ip}"

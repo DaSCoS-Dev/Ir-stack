@@ -1,0 +1,19 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Dascos
+[Unit]
+Description=Watch identity and SSH configuration files
+StartLimitIntervalSec=300
+StartLimitBurst=40
+
+[Path]
+PathModified=/etc/passwd
+PathModified=/etc/shadow
+PathModified=/etc/group
+PathModified=/etc/gshadow
+PathModified=/etc/sudoers
+PathModified=/etc/sudoers.d
+PathModified=/etc/ssh/sshd_config
+Unit=ir-stack-identity-path.service
+
+[Install]
+WantedBy=multi-user.target

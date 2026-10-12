@@ -1,0 +1,22 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Dascos
+[Unit]
+Description=IR Stack periodic identity check
+After=auditd.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/identity-incident-handler.sh timer
+User=root
+Group=root
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/var/log -/var/spool/postfix /root/firewall-backups /run/ir-stack /var/lib/ir-stack
+ProtectControlGroups=yes
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+NoNewPrivileges=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK

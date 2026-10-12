@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Dascos
+set -euo pipefail
+. /usr/local/lib/ir-stack/common.sh
+ir_load_config
+cmd="${1:-}"; ip="${2:-}"
+local_action(){ local backend driver; backend="$(ir_resolve_firewall_backend)"; [[ "$backend" != none ]] || { echo 'backend locale non disponibile' >&2; return 2; }; driver="$(ir_firewall_driver "$backend")"; "$driver" "$1" "${2:-}"; }
+remote_action(){ /usr/local/sbin/ir-openwrt-ban "$1" "${2:-}"; }
+run_backends(){
+    local action="$1" addr="${2:-}" b rc=0
+    IFS=', ' read -ra bs <<< "$BAN_BACKENDS"
+    for b in "${bs[@]}"; do
+        [[ -n "$b" ]] || continue
+        case "$b" in local) local_action "$action" "$addr" || rc=$?;; openwrt) remote_action "$action" "$addr" || rc=$?;; *) echo "BAN_BACKEND sconosciuto: $b" >&2; rc=2;; esac
+    done
+    return "$rc"
+}
+case "$cmd" in
+ add)
+    ip="$(ir_validate_ip "$ip")"
+    if ir_ip_is_trusted "$ip" "$TRUSTED_SOURCES"; then echo "Rifiuto ban di trusted source: $ip" >&2; exit 3; fi
+    run_backends ban-add "$ip"; ir_log ir-stack-ban "ban add ip=$ip backends=$BAN_BACKENDS";;
+ del) ip="$(ir_validate_ip "$ip")"; run_backends ban-del "$ip"; ir_log ir-stack-ban "ban del ip=$ip backends=$BAN_BACKENDS";;
+ check) run_backends check;;
+ status) run_backends ban-status;;
+ *) echo 'Uso: ir-ban add IP|del IP|check|status' >&2; exit 2;;
+esac

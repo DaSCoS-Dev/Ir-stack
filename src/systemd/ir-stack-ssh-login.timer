@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Dascos
+[Unit]
+Description=Poll journald for successful SSH logins
+
+[Timer]
+OnBootSec=30s
+OnUnitActiveSec=20s
+AccuracySec=2s
+Unit=ir-stack-ssh-login.service
+
+[Install]
+WantedBy=timers.target

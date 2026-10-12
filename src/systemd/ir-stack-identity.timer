@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Dascos
+[Unit]
+Description=Periodic IR Stack identity check
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+Unit=ir-stack-identity-timer.service
+
+[Install]
+WantedBy=timers.target
