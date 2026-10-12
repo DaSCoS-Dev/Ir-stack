@@ -51,7 +51,7 @@ jobs:
           bash -n dist/install-ir-stack.sh
           ./dist/install-ir-stack.sh --help >/dev/null
 
-      - name: Create or refresh GitHub release
+      - name: Create immutable GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.version.outputs.version }}
@@ -59,12 +59,40 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            tag_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" --jq .object.sha)"
+            if [[ "$tag_sha" != "$GITHUB_SHA" ]]; then
+              echo "Rifiuto di spostare una release pubblicata: $TAG punta a $tag_sha, non a $GITHUB_SHA" >&2
+              exit 3
+            fi
+
+            assets="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name')"
+            for required in install-ir-stack.sh SHA256SUMS; do
+              grep -Fxq "$required" <<<"$assets" || {
+                echo "Release $TAG già esistente ma asset $required mancante; intervento manuale richiesto." >&2
+                exit 4
+              }
+            done
+
+            echo "Release $TAG già pubblicata sul commit corrente: nessuna modifica." >&2
+            exit 0
+          fi
+
           notes="$(mktemp)"
           trap 'rm -f "$notes"' EXIT
+
+          release_kind="Release"
+          prerelease=false
+          if [[ "$VERSION" == *-* ]]; then
+            release_kind="Pre-release"
+            prerelease=true
+          fi
+
           cat > "$notes" <<EOF
           # IR Stack $VERSION
 
-          Release candidate dopo security/code review completa.
+          $release_kind generata dalla pipeline di release dopo i controlli CI.
 
           ## Highlights
 
@@ -83,31 +111,14 @@ jobs:
           Licenza: **GPL-3.0-or-later**.
           EOF
 
-          prerelease=false
-          [[ "$VERSION" == *-* ]] && prerelease=true
-
-          if release_id="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" --jq .id 2>/dev/null)"; then
-            gh api --method PATCH "repos/$GITHUB_REPOSITORY/git/refs/tags/$TAG" \
-              -f sha="$GITHUB_SHA" -F force=true >/dev/null
-            gh api --method PATCH "repos/$GITHUB_REPOSITORY/releases/$release_id" \
-              -f tag_name="$TAG" \
-              -f target_commitish="$GITHUB_SHA" \
-              -f name="IR Stack $VERSION" \
-              -f body="$(cat "$notes")" \
-              -F prerelease="$prerelease" >/dev/null
-            gh release upload "$TAG" \
-              dist/install-ir-stack.sh dist/SHA256SUMS \
-              --repo "$GITHUB_REPOSITORY" --clobber
-          else
-            args=(
-              "$TAG"
-              --repo "$GITHUB_REPOSITORY"
-              --target "$GITHUB_SHA"
-              --title "IR Stack $VERSION"
-              --notes-file "$notes"
-              dist/install-ir-stack.sh
-              dist/SHA256SUMS
-            )
-            [[ "$prerelease" == true ]] && args+=(--prerelease)
-            gh release create "${args[@]}"
-          fi
+          args=(
+            "$TAG"
+            --repo "$GITHUB_REPOSITORY"
+            --target "$GITHUB_SHA"
+            --title "IR Stack $VERSION"
+            --notes-file "$notes"
+            dist/install-ir-stack.sh
+            dist/SHA256SUMS
+          )
+          [[ "$prerelease" == true ]] && args+=(--prerelease)
+          gh release create "${args[@]}"
